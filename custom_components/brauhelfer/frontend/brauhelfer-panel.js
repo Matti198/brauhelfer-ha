@@ -389,7 +389,14 @@ class BrauhelferPanel extends HTMLElement {
         <p class="muted">Prüfe unter Einstellungen → Geräte &amp; Dienste, ob die Datenbank erreichbar ist.</p></div>`;
       return;
     }
-    main.innerHTML = VIEWS[this.view.name].render(this);
+    try {
+      main.innerHTML = VIEWS[this.view.name].render(this);
+    } catch (err) {
+      console.error("Brauhelfer:", err);
+      main.innerHTML = `<div class="empty"><p class="gross">Diese Ansicht konnte nicht angezeigt werden.</p>
+        <p class="muted">Meist hilft es, Home Assistant nach einem Update neu zu starten und die Seite neu zu laden.</p>
+        <p class="muted" style="font-family:monospace;font-size:12px">${String(err?.message || err).replace(/[<>&]/g, "")}</p></div>`;
+    }
     this.renderToast();
   }
 

@@ -21,7 +21,8 @@ const LAUTSTAERKEN = [null, 20, 30, 40, 50, 60, 70, 80];
 
 export function render(p) {
   const e = p.entry;
-  const cfg = e.benachrichtigung;
+  // Standardwerte, falls das Backend (noch) eine ältere Version ist
+  const cfg = { ziele: [], lautsprecher: [], tts: null, lautstaerke: null, ereignisse: {}, ...(e.benachrichtigung || {}) };
   const aw = p.auswahl;
   const notify = aw?.notify || [];
   const push = notify;
@@ -135,7 +136,7 @@ export const actions = {
   "cfg-ziel": (p, btn) => {
     const cfg = p.entry.benachrichtigung;
     const gruppe = btn.dataset.gruppe;
-    const liste = new Set(cfg[gruppe]);
+    const liste = new Set(cfg[gruppe] || []);
     if (liste.has(btn.dataset.wert)) liste.delete(btn.dataset.wert);
     else liste.add(btn.dataset.wert);
     speichern(p, { [gruppe]: [...liste] });
@@ -179,7 +180,7 @@ export const actions = {
 export function change(p, ev) {
   const ls = ev.target.closest?.("select[data-cfg-lautsprecher]");
   if (ls) {
-    if (ls.value) speichern(p, { lautsprecher: [...p.entry.benachrichtigung.lautsprecher, ls.value] }, "Lautsprecher hinzugefügt.");
+    if (ls.value) speichern(p, { lautsprecher: [...(p.entry.benachrichtigung.lautsprecher || []), ls.value] }, "Lautsprecher hinzugefügt.");
     return;
   }
   const cs = ev.target.closest?.("select[data-cfg-sel]");
