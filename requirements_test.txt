@@ -3,3 +3,4 @@ freezegun
 home-assistant-frontend==20260128.6
 mutagen
 ha-ffmpeg
+ha-ffmpeg
