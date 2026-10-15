@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.components import persistent_notification, tts
+from homeassistant.components import persistent_notification
 from homeassistant.components.media_player import MediaPlayerEntityFeature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
@@ -108,6 +108,8 @@ class Benachrichtiger:
         Mit Ankündigungsmodus (Sonos, Music Assistant) wird laufende Musik nur kurz
         leiser und läuft danach weiter.
         """
+        from homeassistant.components import tts  # noqa: PLC0415 - erst laden, wenn wirklich angesagt wird
+
         engine = self.cfg.get("tts") or standard_tts(self.hass)
         if not engine:
             _LOGGER.warning("Keine Sprachausgabe (TTS) in Home Assistant eingerichtet, Ansage entfällt")

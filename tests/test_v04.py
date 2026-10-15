@@ -192,9 +192,9 @@ async def test_meldungen(hass: HomeAssistant, setup):
 
 
 async def test_brautag_und_details(hass: HomeAssistant, setup, hass_ws_client, monkeypatch):
-    import custom_components.brauhelfer.benachrichtigung as bn
+    from homeassistant.components import tts
 
-    monkeypatch.setattr(bn.tts, "generate_media_source_id", lambda hass, msg, **kw: f"media-source://tts/{kw['engine']}?message={msg}")
+    monkeypatch.setattr(tts, "generate_media_source_id", lambda hass, msg, **kw: f"media-source://tts/{kw['engine']}?message={msg}")
     call = setup["call"]
     pushes = async_mock_service(hass, "notify", "mobile_app_iphone")
     hass.states.async_set("media_player.sonos_kueche", "playing", {"supported_features": 1048576 | 512})
@@ -339,7 +339,7 @@ async def test_ansage_ueber_lautsprecher(hass: HomeAssistant, setup):
     r = await call({"type": "brauhelfer/einstellungen", "benachrichtigung": {
         "lautsprecher": ["media_player.kueche_sonos", "media_player.alter_player"], "lautstaerke": 40}})
     assert r["success"]
-    with patch("custom_components.brauhelfer.benachrichtigung.tts.generate_media_source_id",
+    with patch("homeassistant.components.tts.generate_media_source_id",
                return_value="media-source://tts/tts.piper?message=x") as gen:
         r = await call({"type": "brauhelfer/test_meldung", "ansage": True})
         assert r["success"], r
