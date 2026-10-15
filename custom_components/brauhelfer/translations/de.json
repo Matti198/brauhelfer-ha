@@ -1,0 +1,103 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Kleiner Brauhelfer",
+        "description": "Pfad zur Datenbank des kleinen Brauhelfers auf dem Home-Assistant-Server, z. B. im Samba-Ordner `share`. {error}",
+        "data": {
+          "path": "Pfad zu kb_daten.sqlite"
+        }
+      }
+    },
+    "error": {
+      "not_found": "Datei nicht gefunden. Liegt sie im Ordner /share/brauhelfer/?",
+      "invalid": "Datei kann nicht gelesen werden: {error}",
+      "schema": "Unbekanntes Datenbankformat: {error}"
+    },
+    "abort": {
+      "already_configured": "Diese Datenbank ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Gärverlauf",
+        "description": "Wie oft eine laufende Aufzeichnung einen Messwert in den Hauptgärverlauf schreibt. Die Pill wählst du pro Sud auf der Brauhelfer-Seite.",
+        "data": {
+          "interval": "Intervall für automatische Einträge",
+          "max_age": "Pill-Werte höchstens so alt",
+          "backups": "Anzahl Sicherungen"
+        },
+        "data_description": {
+          "max_age": "Ist der letzte Pill-Wert älter, wird nichts eingetragen (Pill offline oder Batterie leer).",
+          "backups": "Vor jedem Schreiben wird eine Kopie in den Unterordner backup gelegt. 0 schaltet das ab."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "uebersicht": {
+        "name": "Aktuelle Sude"
+      },
+      "restextrakt": {
+        "name": "Aufzeichnung Restextrakt"
+      },
+      "alkohol": {
+        "name": "Aufzeichnung Alkohol"
+      },
+      "temperatur": {
+        "name": "Aufzeichnung Temperatur"
+      },
+      "vergaerungsgrad": {
+        "name": "Aufzeichnung Vergärungsgrad"
+      },
+      "stammwuerze": {
+        "name": "Aufzeichnung Stammwürze"
+      },
+      "gaertage": {
+        "name": "Aufzeichnung Tage seit Brautag"
+      },
+      "letzter_eintrag": {
+        "name": "Letzter Gärverlauf-Eintrag"
+      }
+    },
+    "button": {
+      "log_now": {
+        "name": "Laufende Aufzeichnungen jetzt eintragen"
+      }
+    }
+  },
+  "services": {
+    "messwert_eintragen": {
+      "name": "Messwert eintragen",
+      "description": "Trägt einen Messwert in den Hauptgärverlauf eines Suds ein. Fehlende Werte werden von der RAPT Pill genommen.",
+      "fields": {
+        "sud_id": {
+          "name": "Sud-ID",
+          "description": "ID des Suds (Attribut sud_id). Standard: der Sud der Pill."
+        },
+        "restextrakt": {
+          "name": "Restextrakt",
+          "description": "Scheinbarer Restextrakt in °P."
+        },
+        "dichte": {
+          "name": "Dichte",
+          "description": "Spezifische Dichte (SG), alternativ zum Restextrakt."
+        },
+        "temperatur": {
+          "name": "Temperatur",
+          "description": "Temperatur in °C."
+        },
+        "bemerkung": {
+          "name": "Bemerkung",
+          "description": "Text für die Spalte Bemerkung."
+        },
+        "config_entry_id": {
+          "name": "Datenbank",
+          "description": "Nur nötig, wenn mehrere Datenbanken eingerichtet sind."
+        }
+      }
+    }
+  }
+}

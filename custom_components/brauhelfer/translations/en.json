@@ -1,0 +1,103 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Kleiner Brauhelfer",
+        "description": "Path to the kleiner-brauhelfer database on the Home Assistant server, e.g. in the Samba `share` folder. {error}",
+        "data": {
+          "path": "Path to kb_daten.sqlite"
+        }
+      }
+    },
+    "error": {
+      "not_found": "File not found.",
+      "invalid": "Cannot read file: {error}",
+      "schema": "Unknown database format: {error}"
+    },
+    "abort": {
+      "already_configured": "This database is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Fermentation log",
+        "description": "How often a running recording writes a reading to the fermentation log. Choose the Pill per brew on the Brauhelfer page.",
+        "data": {
+          "interval": "Interval for automatic entries",
+          "max_age": "Maximum age of Pill readings",
+          "backups": "Number of backups"
+        },
+        "data_description": {
+          "max_age": "If the latest Pill reading is older, nothing is written.",
+          "backups": "A copy is stored in the backup subfolder before every write. 0 disables backups."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "uebersicht": {
+        "name": "Current brews"
+      },
+      "restextrakt": {
+        "name": "Pill brew apparent extract"
+      },
+      "alkohol": {
+        "name": "Pill brew alcohol"
+      },
+      "temperatur": {
+        "name": "Pill brew temperature"
+      },
+      "vergaerungsgrad": {
+        "name": "Pill brew attenuation"
+      },
+      "stammwuerze": {
+        "name": "Pill brew original gravity"
+      },
+      "gaertage": {
+        "name": "Pill brew days since brew day"
+      },
+      "letzter_eintrag": {
+        "name": "Last fermentation log entry"
+      }
+    },
+    "button": {
+      "log_now": {
+        "name": "Log running recordings now"
+      }
+    }
+  },
+  "services": {
+    "messwert_eintragen": {
+      "name": "Add reading",
+      "description": "Adds a reading to a brew's fermentation log. Missing values are taken from the RAPT Pill.",
+      "fields": {
+        "sud_id": {
+          "name": "Brew ID",
+          "description": "Brew ID (attribute sud_id). Default: the Pill's brew."
+        },
+        "restextrakt": {
+          "name": "Apparent extract",
+          "description": "Apparent extract in °P."
+        },
+        "dichte": {
+          "name": "Gravity",
+          "description": "Specific gravity (SG), alternative to apparent extract."
+        },
+        "temperatur": {
+          "name": "Temperature",
+          "description": "Temperature in °C."
+        },
+        "bemerkung": {
+          "name": "Comment",
+          "description": "Text for the comment column."
+        },
+        "config_entry_id": {
+          "name": "Database",
+          "description": "Only needed when several databases are configured."
+        }
+      }
+    }
+  }
+}

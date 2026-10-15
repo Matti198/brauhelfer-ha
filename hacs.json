@@ -1,0 +1,6 @@
+{
+  "name": "Kleiner Brauhelfer",
+  "homeassistant": "2025.1.0",
+  "render_readme": true,
+  "country": ["DE", "AT", "CH"]
+}

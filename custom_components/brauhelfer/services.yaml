@@ -1,0 +1,38 @@
+messwert_eintragen:
+  fields:
+    sud_id:
+      selector:
+        number:
+          min: 1
+          max: 100000
+          mode: box
+    restextrakt:
+      selector:
+        number:
+          min: -5
+          max: 35
+          step: 0.01
+          unit_of_measurement: "°P"
+          mode: box
+    dichte:
+      selector:
+        number:
+          min: 0.98
+          max: 1.15
+          step: 0.001
+          mode: box
+    temperatur:
+      selector:
+        number:
+          min: -5
+          max: 45
+          step: 0.1
+          unit_of_measurement: "°C"
+          mode: box
+    bemerkung:
+      selector:
+        text:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: brauhelfer
