@@ -93,4 +93,10 @@ Dienst `brauhelfer.messwert_eintragen` (Restextrakt oder Dichte, Temperatur; ohn
 
 ## Lizenz
 
-GPL-3.0. Die Berechnungen (Alkohol, Vergärungsgrad, Dichte, Sudhausausbeute, Rohstoffabzug …) sind aus dem Quellcode des [kleinen Brauhelfers 2](https://github.com/kleiner-brauhelfer/kleiner-brauhelfer-2) übernommen, der ebenfalls unter GPL-3.0 steht. `tests/kb_daten.sqlite` ist die Beispieldatenbank aus diesem Projekt.
+Copyright (C) 2026 Matti198
+
+Dieses Programm ist freie Software unter der [GNU General Public License Version 3](LICENSE). Es wird ohne jede Gewährleistung bereitgestellt.
+
+Die Berechnungen (Alkohol, Vergärungsgrad, Dichte, Sudhausausbeute, Rohstoffabzug …) sind aus dem Quellcode des [kleinen Brauhelfers 2](https://github.com/kleiner-brauhelfer/kleiner-brauhelfer-2) übernommen, der ebenfalls unter GPL-3.0 steht. `tests/kb_daten.sqlite` ist unverändert die Beispieldatenbank aus diesem Projekt. Dank an die Entwickler des kleinen Brauhelfers.
+
+Dies ist ein privates, inoffizielles Projekt und gehört nicht zum kleinen Brauhelfer.
