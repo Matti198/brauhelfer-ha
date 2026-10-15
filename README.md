@@ -1,5 +1,7 @@
 # Kleiner Brauhelfer für Home Assistant
 
+[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz) [![Prüfen](https://github.com/Matti198/brauhelfer-ha/actions/workflows/validate.yml/badge.svg)](https://github.com/Matti198/brauhelfer-ha/actions/workflows/validate.yml)
+
 Eigene Integration für die Datenbank des [kleinen Brauhelfers 2](https://github.com/kleiner-brauhelfer/kleiner-brauhelfer-2). Die Datenbank liegt auf dem HA-Server, der Brauhelfer am PC greift per Samba darauf zu, und in der HA-Seitenleiste gibt es eine eigene Seite **Brauhelfer** – auch in der iOS-App.
 
 **Was sie kann**
