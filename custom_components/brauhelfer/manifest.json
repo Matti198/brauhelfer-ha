@@ -4,6 +4,7 @@
   "after_dependencies": [
     "media_player",
     "mobile_app",
+    "recorder",
     "todo",
     "tts"
   ],
