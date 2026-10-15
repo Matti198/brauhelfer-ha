@@ -178,6 +178,71 @@ export const DIALOGE = {
     },
   },
 
+  // ---------------------------------------------------------------- Pill abgleichen
+  abgleich: {
+    farbe,
+    open(p, d) {
+      d.unit = "plato";
+      d.eintragen = true;
+    },
+    render(p, d) {
+      const sg = d.unit === "sg";
+      const a = p.entry.aufzeichnungen[String(d.sudId)];
+      const live = a ? p.live(a) : null;
+      const korr = a ? p.entry.korrekturen?.[a.gravity] : null;
+      const korrT = a?.temperature ? p.entry.korrekturen?.[a.temperature] : null;
+      const vz = (x, dd) => `${x >= 0 ? "+" : "−"}${fmt(Math.abs(x), dd)}`;
+      return `${kopf(p, d, "Pill abgleichen")}
+        <p>Miss eine Probe mit der <b>Spindel</b> und trag den Wert ein. Home Assistant rechnet die Abweichung der Pill aus und korrigiert damit alle weiteren Werte – auch die schon angezeigten.</p>
+        <p class="hint">${icon("information-outline")}<span>Ein Refraktometer zeigt während der Gärung wegen des Alkohols zu hoch an. Dafür nur die Spindel nehmen, die Probe vorher entgasen und bei der Temperatur messen, auf die die Spindel geeicht ist.</span></p>
+        <dl class="info" style="margin:0 0 14px">
+          <div><dt>Pill zeigt gerade</dt><dd>${live && !live.offline ? `${fmt(live.plato, 2)} °P${live.sg ? ` (SG ${fmt(live.sg + 0, 3)})` : ""}` : "keinen Wert"}</dd></div>
+          <div><dt>Korrektur Dichte</dt><dd>${korr ? `${vz(korr.wert, 2)} °P` : "keine"}</dd></div>
+          ${a?.temperature ? `<div><dt>Korrektur Temperatur</dt><dd>${korrT ? `${vz(korrT.wert, 1)} °C` : "keine"}</dd></div>` : ""}
+        </dl>
+        <div class="seg" role="radiogroup" aria-label="Einheit">
+          <button role="radio" aria-checked="${!sg}" data-action="dlg:unit" data-unit="plato">°Plato</button>
+          <button role="radio" aria-checked="${sg}" data-action="dlg:unit" data-unit="sg">SG</button></div>
+        <div class="felder">${zahl(d, "wert", sg ? "Spindel: Dichte" : "Spindel: Restextrakt", sg ? "SG" : "°P", "", sg ? "1,012" : "3,1")}
+          ${a?.temperature ? zahl(d, "temp", "Thermometer (optional)", "°C") : ""}</div>
+        <button class="switch" role="switch" aria-checked="${d.eintragen}" data-action="dlg:eintragen" style="margin-top:12px">
+          <span class="knob"></span><span>Spindelwert auch in den Gärverlauf eintragen</span></button>
+        ${aktionen(d, korr || korrT ? `<button class="btn" data-action="dlg:reset">Korrektur löschen</button>` : "",
+          `<button class="btn primary" data-action="dlg:abgleichen">${icon("tune-variant")}Abgleichen</button>`)}`;
+    },
+    actions: {
+      unit: (p, d, btn) => {
+        p.keepForm();
+        if (d.unit !== btn.dataset.unit) d.form.wert = "";
+        d.unit = btn.dataset.unit;
+        p.renderDialog();
+      },
+      eintragen: (p, d) => {
+        p.keepForm();
+        d.eintragen = !d.eintragen;
+        p.renderDialog();
+      },
+      reset: (p, d) => p.dialogRun(async () => {
+        await p.ws("pill_abgleich", { sud_id: d.sudId, zuruecksetzen: true });
+        await fertig(p, "Korrektur gelöscht. Die Pill-Werte gelten wieder unverändert.");
+      }),
+      abgleichen: (p, d) => p.dialogRun(async () => {
+        const f = d.form;
+        const payload = { sud_id: d.sudId, eintragen: d.eintragen, referenz: "Spindel" };
+        const w = numIn(f.wert);
+        const t = numIn(f.temp);
+        if (Number.isNaN(w) && Number.isNaN(t)) throw new Error("Bitte den Spindelwert eintragen.");
+        if (!Number.isNaN(w)) payload[d.unit === "sg" ? "dichte" : "restextrakt"] = w;
+        if (!Number.isNaN(t)) payload.temperatur = t;
+        const r = await p.ws("pill_abgleich", payload);
+        const teile = [];
+        if (r.dichte !== null && r.dichte !== undefined) teile.push(`${r.dichte >= 0 ? "+" : "−"}${fmt(Math.abs(r.dichte), 2)} °P`);
+        if (r.temperatur !== null && r.temperatur !== undefined) teile.push(`${r.temperatur >= 0 ? "+" : "−"}${fmt(Math.abs(r.temperatur), 1)} °C`);
+        await fertig(p, `Pill abgeglichen: ${teile.join(", ")}.`);
+      }),
+    },
+  },
+
   // ---------------------------------------------------------------- Leer
   leer: {
     farbe,

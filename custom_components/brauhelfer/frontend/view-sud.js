@@ -63,6 +63,7 @@ function kopf(p, s, d, c) {
       <div><dt>Alkohol</dt><dd>${fmt(last ? last.alkohol : 0, 1)}<small> % vol</small></dd></div>
       <div><dt>Vergärungsgrad</dt><dd>${fmt(vgIst, 0)}<small> % von ${fmt(s.vg_rezept, 0)} %</small></dd></div>
       <div><dt>Temperatur</dt><dd>${live && live.fresh && !Number.isNaN(live.temp) ? fmt(live.temp, 1) : last ? fmt(last.temperatur, 1) : "–"}<small> °C</small></dd></div>`;
+    if (s.prognose) badges.push(prognoseBadge(s.prognose));
     if (a) badges.push(live?.fresh ? `<span class="badge live">${icon("bluetooth")}${esc(a.name)} zeichnet auf</span>` : `<span class="badge warn">${icon("bluetooth-off")}${esc(a.name)} ohne Werte</span>`);
     const reg = e.regelung[String(s.id)];
     const sst = reg?.schrank_id ? e.schrank_status[reg.schrank_id] : null;
@@ -86,7 +87,7 @@ function kopf(p, s, d, c) {
     aktionen = `<button class="btn" data-action="dialog" data-typ="braudaten" data-sud="${s.id}">${icon("pencil-outline")}Werte eintragen</button>
       <button class="btn primary" data-action="brautag-start" data-sud="${s.id}">${icon(bt ? "play" : "kettle-steam-outline")}${bt ? "Weiter brauen" : "Brautag starten"}</button>`;
   } else if (s.status === 1) {
-    const fertig = s.vg_rezept > 0 && fuell >= 1;
+    const fertig = (s.vg_rezept > 0 && fuell >= 1) || !!s.prognose?.erreicht;
     aktionen = `<button class="btn ${fertig ? "primary" : ""}" data-action="dialog" data-typ="fertig" data-sud="${s.id}">${icon("flag-checkered")}Gärung fertig</button>`;
   }
   return `<header class="detail-head">
@@ -101,6 +102,24 @@ function kopf(p, s, d, c) {
     ${aktionen ? `<div class="hero-aktionen">${aktionen}</div>` : ""}
   </header>`;
 }
+
+export function prognoseText(pg, kurz = false) {
+  if (!pg) return "";
+  if (pg.erreicht) return kurz ? "Endwert erreicht" : `Endwert ${fmt(pg.endwert, 1)} °P erreicht`;
+  const d = parseDate(pg.fertig_am);
+  if (!d) return "";
+  const heute = new Date();
+  heute.setHours(0, 0, 0, 0);
+  const tage = Math.round((new Date(d).setHours(0, 0, 0, 0) - heute.getTime()) / 86400000);
+  const tag = tage <= 0 ? "heute" : tage === 1 ? "morgen" : dfTag.format(d);
+  return kurz ? `fertig ${tage <= 1 ? tag : `ca. ${tag}`}` : `voraussichtlich fertig ${tage <= 1 ? tag : `am ${tag}`}`;
+}
+
+function prognoseBadge(pg) {
+  return `<span class="badge ${pg.erreicht ? "live" : ""}" title="Aus dem bisherigen Gärverlauf geschätzt">${icon(pg.erreicht ? "flag-checkered" : "calendar-clock")}${prognoseText(pg)}</span>`;
+}
+
+const dfTag = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "numeric", month: "short" });
 
 function reifung(abf) {
   const t = daysSince(abf);
@@ -178,10 +197,27 @@ function pill(p, e, s) {
   return card("Aufzeichnung", "bluetooth", `<div class="pill">
     <div class="pill-live"><span class="dot-live ${live?.fresh ? "fresh" : ""}" aria-hidden="true"></span>
       <div><p class="pill-title">${esc(a.name)}</p><p class="pill-values">${esc(txt)}</p>
-      <p class="muted">Trägt alle ${takt(e)} ein${start ? `, seit ${dfFull.format(start)}` : ""}.</p></div></div>${notice}</div>`,
+      <p class="muted">Trägt alle ${takt(e)} ${glaettungText(e)} ein${start ? `, seit ${dfFull.format(start)}` : ""}.</p>
+      ${korrText(e, a)}</div></div>${notice}</div>`,
   { aktionen: `
     <button class="btn quiet" data-action="pill-stop" data-sud="${s.id}">${icon("stop-circle-outline")}Aufzeichnung beenden</button>
+    <button class="btn" data-action="dialog" data-typ="abgleich" data-sud="${s.id}">${icon("tune-variant")}Abgleichen</button>
     <button class="btn primary" data-action="pill-log" data-sud="${s.id}" ${busyLog ? "disabled" : ""}>${icon("database-plus-outline")}${busyLog ? "Trage ein …" : "Jetzt eintragen"}</button>` });
+}
+
+function glaettungText(e) {
+  const g = e.einstellungen?.glaettung_min || 0;
+  return g > 0 ? `den Mittelwert der letzten ${g} Minuten` : "den aktuellen Wert";
+}
+
+function korrText(e, a) {
+  const k = e.korrekturen?.[a.gravity];
+  const kt = a.temperature ? e.korrekturen?.[a.temperature] : null;
+  if (!k && !kt) return `<p class="muted">Nicht abgeglichen. Mit einem Spindelwert werden die Pill-Werte genauer.</p>`;
+  const vz = (x, d) => `${x >= 0 ? "+" : "−"}${fmt(Math.abs(x), d)}`;
+  const teile = [k ? `${vz(k.wert, 2)} °P` : null, kt ? `${vz(kt.wert, 1)} °C` : null].filter(Boolean).join(", ");
+  const dat = parseDate((k || kt).datum);
+  return `<p class="muted">${icon("tune-variant")} Abgeglichen${dat ? ` am ${dfDate.format(dat)}` : ""}: ${teile}</p>`;
 }
 
 function takt(e) {

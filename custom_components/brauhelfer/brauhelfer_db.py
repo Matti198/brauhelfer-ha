@@ -167,6 +167,7 @@ class Sud:
     kommentar: str | None = None
     abfuelldatum: datetime | None = None
     lager_fehlt: list[dict] = field(default_factory=list)
+    sre_schnellgaer: float | None = None
     letzter_messwert: Messwert | None = None
     anzahl_messwerte: int = 0
     verlauf: list[Messwert] = field(default_factory=list)
@@ -413,6 +414,15 @@ def read_snapshot(path: str) -> Snapshot:
                 if sud.verlauf:
                     # Wie getLastRow(): späteste Zeit gewinnt (nicht die höchste ID)
                     sud.letzter_messwert = sud.verlauf[-1]
+                if r["SchnellgaerprobeAktiv"]:
+                    # Letzter Wert der Schnellgärprobe (ohne den Anstellwert) = erreichbarer Endvergärungsgrad
+                    sg = [
+                        (_parse_dt(x["Zeitstempel"]) or datetime.min, x["Restextrakt"])
+                        for x in conn.execute("SELECT Zeitstempel, Restextrakt FROM Schnellgaerverlauf WHERE SudID = ?", (sud.id,))
+                        if x["Restextrakt"] is not None and x["Restextrakt"] < sud.sw_ist - 0.5
+                    ]
+                    if sg:
+                        sud.sre_schnellgaer = max(sg)[1]
             snap.sude[sud.id] = sud
         return snap
     except sqlite3.DatabaseError as err:

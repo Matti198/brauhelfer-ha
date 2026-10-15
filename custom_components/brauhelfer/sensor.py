@@ -19,7 +19,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from . import brauhelfer_db as db
+from . import brauhelfer_db as db, prognose
 from .const import DOMAIN
 from .coordinator import BrauhelferConfigEntry, BrauhelferCoordinator
 from .entity import BrauhelferEntity
@@ -189,6 +189,9 @@ class SudSensor(BrauhelferEntity, SensorEntity):
         data = _sud_dict(sud)
         a = self.coordinator.aufzeichnungen.get(sud.id)
         data["aufzeichnung"] = a.name if a else None
+        if sud.status == db.STATUS_GEBRAUT:
+            pg = prognose.fuer_sud(sud, db.jetzt())
+            data["prognose_fertig"] = pg["fertig_am"].isoformat() if pg else None
         return data
 
 

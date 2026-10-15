@@ -13,8 +13,9 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 
-from . import brauhelfer_db as db
+from . import brauhelfer_db as db, prognose
 from .const import DOMAIN
 
 PANEL_URL = "brauhelfer"
@@ -75,7 +76,7 @@ def async_register_websocket(hass: HomeAssistant) -> None:
                 ws_details, ws_zutat, ws_hefe, ws_schnellgaer, ws_nachgaer, ws_bewertung,
                 ws_fass, ws_tag, ws_schrank, ws_regelung, ws_einstellungen, ws_test_meldung,
                 ws_auswahl, ws_brautag, ws_brautag_aktion, ws_lager_bedarf, ws_lager_abziehen,
-                ws_einkaufsliste):
+                ws_einkaufsliste, ws_pill_abgleich):
         websocket_api.async_register_command(hass, cmd)
 
 
@@ -116,6 +117,10 @@ def _sud(sud: db.Sud) -> dict[str, Any]:
     if sud.status >= db.STATUS_GEBRAUT:
         data["braudatum"] = _iso(sud.braudatum)
         data["verlauf"] = [_messwert(m) for m in sud.verlauf]
+        data["sre_schnellgaer"] = sud.sre_schnellgaer
+    if sud.status == db.STATUS_GEBRAUT:
+        pg = prognose.fuer_sud(sud, db.jetzt())
+        data["prognose"] = {"fertig_am": _iso(pg["fertig_am"]), "erreicht": pg["erreicht"], "endwert": round(pg["endwert"], 2)} if pg else None
     if sud.status >= db.STATUS_ABGEFUELLT:
         data["abfuelldatum"] = _iso(sud.abfuelldatum)
     return data
@@ -189,6 +194,7 @@ def ws_data(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg
                 "regel_soll": {str(s_.id): coord.regler.soll_fuer_sud(s_.id) for s_ in snap.gaerend},
                 "benachrichtigung": coord.speicher.benachrichtigung,
                 "einstellungen": coord.speicher.einstellungen,
+                "korrekturen": coord.speicher.data["pill_korrektur"],
                 "brautag": coord.speicher.data.get("brautag"),
                 "fass_lernen": _lernen(coord),
                 "letzter_scan": coord.fasskeller.letzter_scan,
@@ -493,6 +499,8 @@ async def ws_einstellungen(hass, coord, msg):
         coord.speicher.einstellungen["lager"] = bool(e["lager"])
     if "einkaufsliste" in e:
         coord.speicher.einstellungen["einkaufsliste"] = e["einkaufsliste"] or None
+    if "glaettung_min" in e:
+        coord.speicher.einstellungen["glaettung_min"] = max(0, min(240, int(e["glaettung_min"] or 0)))
     neu = msg.get("benachrichtigung") or {}
     cfg = coord.speicher.benachrichtigung
     for k in ("ziele", "lautsprecher"):
@@ -691,3 +699,69 @@ async def ws_einkaufsliste(hass, coord, msg):
         }, blocking=True)
         neu += 1
     return {"neu": neu, "liste": ziel}
+
+
+@_ws_handler({
+    vol.Required("type"): "brauhelfer/pill_abgleich",
+    vol.Required("sud_id"): int,
+    vol.Optional("restextrakt"): vol.Any(None, vol.Coerce(float)),
+    vol.Optional("dichte"): vol.Any(None, vol.Coerce(float)),
+    vol.Optional("temperatur"): vol.Any(None, vol.Coerce(float)),
+    vol.Optional("eintragen", default=True): bool,
+    vol.Optional("zuruecksetzen", default=False): bool,
+    vol.Optional("referenz"): vol.Any(None, str),
+})
+async def ws_pill_abgleich(hass, coord, msg):
+    """Pill mit einer Referenzmessung (Spindel/Refraktometer) abgleichen."""
+    a = coord.aufzeichnungen.get(msg["sud_id"])
+    if a is None:
+        raise HomeAssistantError("Für diesen Sud läuft keine Aufzeichnung")
+    korr = coord.speicher.data["pill_korrektur"]
+    if msg["zuruecksetzen"]:
+        korr.pop(a.gravity, None)
+        if a.temperature:
+            korr.pop(a.temperature, None)
+        coord.speicher.speichern()
+        coord.async_update_listeners()
+        return {"dichte": 0.0, "temperatur": 0.0}
+    ref = msg.get("restextrakt")
+    if ref is None and msg.get("dichte") is not None:
+        sg = msg["dichte"]
+        if not 0.98 <= sg <= 1.15:
+            raise HomeAssistantError(f"Dichte {sg} unplausibel (SG zwischen 0,980 und 1,150)")
+        ref = db.dichte_to_plato(sg)
+    if ref is None and msg.get("temperatur") is None:
+        raise HomeAssistantError("Bitte einen Referenzwert eintragen")
+    jetzt = dt_util.now().isoformat()
+    out: dict[str, float | None] = {"dichte": None, "temperatur": None}
+    if ref is not None:
+        if not -5 <= ref <= 35:
+            raise HomeAssistantError(f"Restextrakt {ref:.2f} °P unplausibel")
+        roh = await coord.async_geglaettet(a.gravity, msg["sud_id"], lambda e, s: coord.read_gravity(e, s, roh=True))
+        wert = round(ref - roh, 3)
+        if abs(wert) > 3:
+            raise HomeAssistantError(f"Die Pill weicht um {wert:+.1f} °P ab. Das ist mehr als ein Abgleich ausgleichen sollte – Messung prüfen")
+        korr[a.gravity] = {"wert": wert, "datum": jetzt, "referenz": msg.get("referenz") or None}
+        out["dichte"] = wert
+    if msg.get("temperatur") is not None and a.temperature:
+        roh_t = coord.read_temperature(a.temperature, msg["sud_id"], roh=True)
+        wert_t = round(msg["temperatur"] - roh_t, 2)
+        if abs(wert_t) > 5:
+            raise HomeAssistantError(f"Die Temperatur weicht um {wert_t:+.1f} °C ab – Messung prüfen")
+        korr[a.temperature] = {"wert": wert_t, "datum": jetzt, "referenz": msg.get("referenz") or None}
+        out["temperatur"] = wert_t
+    coord.speicher.speichern()
+    if ref is not None and msg["eintragen"]:
+        temp = msg.get("temperatur")
+        if temp is None:
+            try:
+                temp = coord.read_temperature(a.temperature, msg["sud_id"]) if a.temperature else None
+            except HomeAssistantError:
+                temp = None
+        sud = coord.data.sude.get(msg["sud_id"]) if coord.data else None
+        if temp is None:
+            temp = sud.letzter_messwert.temp if sud and sud.letzter_messwert else 18.0
+        art = msg.get("referenz") or "Referenz"
+        await coord.async_add_messwert(msg["sud_id"], ref, temp, f"{art} (Pill-Abgleich)")
+    coord.async_update_listeners()
+    return out

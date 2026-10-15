@@ -1,5 +1,6 @@
 // Übersicht: Geplant → Gärung → Gebraut
 import { esc, icon, fmt, ebcColor, lineColor, glassSvg, sparkline, parseDate, daysSince, dfLong, vg } from "./lib.js";
+import { prognoseText } from "./view-sud.js";
 
 const ALT_TAGE = 60;
 
@@ -110,7 +111,7 @@ function gaerKarte(p, e, s, dark) {
       </dl>
       <div class="fortschritt">
         <div class="bar"><span style="width:${(anteil * 100).toFixed(0)}%"></span></div>
-        <div class="bar-label"><span><b>${fmt(vgIst, 0)} %</b> vergoren</span><span>${anteil >= 1 ? "Ziel erreicht" : `Ziel ${fmt(ziel, 0)} %`}</span></div>
+        <div class="bar-label"><span><b>${fmt(vgIst, 0)} %</b> vergoren</span><span>${anteil >= 1 ? "Ziel erreicht" : s.prognose ? `Ziel ${fmt(ziel, 0)} %, ${prognoseText(s.prognose, true)}` : `Ziel ${fmt(ziel, 0)} %`}</span></div>
         ${badges.length ? `<div class="reihe" style="margin-top:10px">${badges.join("")}</div>` : ""}
       </div>
     </button>

@@ -65,6 +65,9 @@ class Speicher:
         e = data.setdefault("einstellungen", {})
         e.setdefault("lager", False)
         e.setdefault("einkaufsliste", None)
+        e.setdefault("glaettung_min", 30)
+        data.setdefault("pill_korrektur", {})   # entity_id -> {"wert", "datum", "referenz"}
+        data.setdefault("erinnern", {})         # sud_id -> ISO-Zeit für "Noch warten"
         b = copy.deepcopy(STANDARD_BENACHRICHTIGUNG)
         gespeichert = data.get("benachrichtigung") or {}
         b.update({k: v for k, v in gespeichert.items() if k not in ("ereignisse", "ansage")})

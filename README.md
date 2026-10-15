@@ -8,14 +8,15 @@ Eigene Integration für die Datenbank des [kleinen Brauhelfers 2](https://github
 
 - Reiter **Geplant → Gärung → Gebraut** mit allen Suden, jeder mit Glas in seiner Bierfarbe
 - **Brautag-Assistent**: Schritt für Schritt aus Maischplan, Hopfengaben und Zutaten, mit Timern, Erinnerungen und Ansagen über Sonos oder Music Assistant (z. B. „Jetzt zugeben: 9 g Magnum“)
-- **Gärverlauf per RAPT Pill**: Pill pro Sud wählen, „Aufzeichnung starten“
+- **Gärverlauf per RAPT Pill**: Pill pro Sud wählen, „Aufzeichnung starten“. Eingetragen wird der Median der letzten Minuten (Ausreißer fliegen raus), auf Wunsch mit Spindel-Abgleich
+- **Gär-Prognose**: „voraussichtlich fertig am Sa., 17. Okt.“ aus dem bisherigen Verlauf (Endwert aus Schnellgärprobe oder Rezept)
 - **Zutaten & Hopfenstopfen** als zugegeben/entnommen markieren, **Schnellgärprobe**, **Nachgärung** (Druck → CO₂)
 - **Gärschrank-Regelung**: Kühlung und Heizung über Steckdosen, Temperaturprofil nach Vergärungsgrad (z. B. Diacetylrast ab 70 %)
 - **Fässer**: Leergewicht, Wiegen (Waage-Sensor oder von Hand), NFC-Tags pro Glasgröße – Scan mit dem iPhone zieht ein Glas ab
 - **Verkostung** mit denselben Kategorien wie im Brauhelfer
 - **Lager**: Rohstoffe nach dem Brauen und beim Zugeben abziehen wie im Brauhelfer, fehlende Rohstoffe auf die Einkaufsliste
 - **Lebenslauf** pro Sud: alles vom Rezept bis zum letzten Glas auf einer Zeitleiste
-- **Meldungen aufs iPhone**: Gärung steht, Ziel erreicht, Temperatur daneben, Pill offline/Akku, Hopfenstopfen fällig, Fass fast leer, Brautag-Timer
+- **Meldungen aufs iPhone**: Gärung steht, Ziel erreicht, Temperatur daneben, Pill offline/Akku, Hopfenstopfen fällig, Fass fast leer, Brautag-Timer. Bei „Gärung steht“ und „Ziel erreicht“ direkt aus der Meldung „Gärung fertig“ oder „Noch 2 Tage warten“ wählen (Mitteilung gedrückt halten)
 
 Alles, was in die Datenbank geschrieben wird, rechnet HA wie das Desktop-Programm (aus dessen Quellcode übernommen). Vor jedem Schreiben wird eine Sicherung angelegt. Getestet mit Datenbankversion 2009 (kleiner-brauhelfer 2.6).
 
@@ -51,7 +52,7 @@ Unter **Konfigurieren**: Intervall der Pill-Aufzeichnung (Standard 4 h), Höchst
 - *Worüber melden* und *Schwellen* nach Geschmack.
 - *Gärschränke*: Temperatursensor, Steckdose Kühlung, Steckdose Heizung, Schaltabstand, Kompressorpause.
 
-**Pill**: Integration „RAPT Bluetooth“ muss laufen. Die Pill erscheint dann bei jedem Sud in Gärung zur Auswahl.
+**Pill**: Integration „RAPT Bluetooth“ muss laufen. Die Pill erscheint dann bei jedem Sud in Gärung zur Auswahl. Unter *Einstellungen → Pill* stellst du die Glättung ein (Standard 30 min; braucht den Recorder, der in HA standardmäßig läuft). Zum Abgleich beim Sud „Aufzeichnung → Abgleichen“: Spindelwert eintragen, HA merkt sich die Abweichung pro Pill. Während der Gärung kein Refraktometer verwenden – der Alkohol verfälscht die Anzeige.
 
 **NFC-Tags**: Beim Fass „NFC-Tag“ → Glasgröße eintragen → „Scannen“ → innerhalb von 3 Minuten den Tag mit der HA-App scannen. Oder einen bereits in HA angelegten Tag aus der Liste wählen. Jeder weitere Scan zieht ein Glas ab.
 

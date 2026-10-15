@@ -1,7 +1,7 @@
 // Brauhelfer – Seitenleisten-Panel für Home Assistant
 // Ohne Build-Schritt: ES-Module, Web Components von HA (ha-card, ha-icon, ha-menu-button).
 
-import { esc, icon, parseDate, fmt, alkohol, vg, dfFull, navigate } from "./lib.js";
+import { esc, icon, parseDate, fmt, alkohol, vg, dfFull, navigate, platoToDichte } from "./lib.js";
 import { CSS } from "./styles.js";
 import * as liste from "./view-liste.js";
 import * as sud from "./view-sud.js";
@@ -196,14 +196,19 @@ class BrauhelferPanel extends HTMLElement {
     if (Number.isNaN(gv)) return { offline: true };
     const tv = t ? parseFloat(t.state) : NaN;
     const unit = (g.attributes.unit_of_measurement || "").toLowerCase().replace("°", "").trim();
-    const plato = unit === "p" || unit === "plato" || gv > 1.5 ? gv : (-616.868 + 1111.14 * gv - 630.272 * gv ** 2 + 135.997 * gv ** 3);
+    const korr = this.entry?.korrekturen || {};
+    const plato = (unit === "p" || unit === "plato" || gv > 1.5 ? gv : (-616.868 + 1111.14 * gv - 630.272 * gv ** 2 + 135.997 * gv ** 3))
+      + (korr[a.gravity]?.wert || 0);
     let temp = tv;
     if (t && t.attributes.unit_of_measurement === "°F") temp = ((tv - 32) * 5) / 9;
+    if (a.temperature) temp += korr[a.temperature]?.wert || 0;
     const pill = this.entry.pills.find((p) => p.gravity === a.gravity);
     const times = [parseDate(g.last_updated), parseDate(pill?.zuletzt)].filter(Boolean);
     const updated = times.length ? new Date(Math.max(...times.map((x) => x.getTime()))) : null;
     const fresh = !!updated && Date.now() - updated.getTime() < this.entry.max_alter_min * 60000;
-    return { sg: gv > 1.5 ? null : gv, plato, temp, updated, fresh };
+    // SG passend zum korrigierten Wert
+    const sg = gv > 1.5 ? null : korr[a.gravity] ? platoToDichte(plato) : gv;
+    return { sg, plato, temp, updated, fresh };
   }
 
   // ------------------------------------------------------------ Aktionen

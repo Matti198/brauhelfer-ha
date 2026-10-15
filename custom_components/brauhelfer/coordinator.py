@@ -278,12 +278,14 @@ class BrauhelferCoordinator(DataUpdateCoordinator[db.Snapshot]):
         return result
 
     async def async_log(self, sud_id: int, automatic: bool = False) -> db.Messwert:
-        """Aktuelle Pill-Werte der Aufzeichnung dieses Suds eintragen."""
+        """Pill-Werte der Aufzeichnung dieses Suds eintragen (geglättet und abgeglichen)."""
         a = self.aufzeichnungen.get(sud_id)
         if a is None:
             raise self._fail(sud_id, "Für diesen Sud läuft keine Aufzeichnung")
-        restextrakt = self.read_gravity(a.gravity, sud_id)
-        temperatur = self.read_temperature(a.temperature, sud_id) if a.temperature else None
+        restextrakt = await self.async_geglaettet(a.gravity, sud_id, self.read_gravity)
+        temperatur = (
+            await self.async_geglaettet(a.temperature, sud_id, self.read_temperature) if a.temperature else None
+        )
         if temperatur is None:
             sud = self.data.sude.get(sud_id) if self.data else None
             temperatur = sud.letzter_messwert.temp if sud and sud.letzter_messwert else 18.0
@@ -393,6 +395,71 @@ class BrauhelferCoordinator(DataUpdateCoordinator[db.Snapshot]):
         rep = getattr(st, "last_reported", None) or st.last_updated
         return dt_util.utcnow() - rep
 
+    # ------------------------------------------------------------------ Glätten und Abgleich
+    @property
+    def glaettung(self) -> timedelta:
+        return timedelta(minutes=float(self.speicher.einstellungen.get("glaettung_min") or 0))
+
+    def korrektur(self, entity_id: str | None) -> float:
+        """Abgleich-Korrektur für einen Pill-Sensor (°P bzw. °C)."""
+        k = self.speicher.data["pill_korrektur"].get(entity_id or "")
+        return float(k["wert"]) if k else 0.0
+
+    async def async_geglaettet(
+        self, entity_id: str, sud_id: int | None, lesen: Callable[..., float]
+    ) -> float:
+        """Median der Werte im Glättungsfenster (inkl. aktuellem Wert), mit Korrektur.
+
+        Ein einzelner Ausreißer der Pill landet so nicht im Gärverlauf. Ohne
+        Recorder oder ohne Glättung wird der aktuelle Wert genommen.
+        """
+        aktuell = lesen(entity_id, sud_id)  # prüft auch, ob die Pill frisch ist
+        fenster = self.glaettung
+        if fenster.total_seconds() <= 0 or "recorder" not in self.hass.config.components:
+            return aktuell
+        korr = self.korrektur(entity_id)
+        try:
+            werte = await self._async_historie(entity_id, fenster)
+        except Exception as err:  # noqa: BLE001 - Glättung ist ein Extra, nie ein Hindernis
+            _LOGGER.debug("Historie für %s nicht lesbar: %s", entity_id, err)
+            return aktuell
+        st = self.hass.states.get(entity_id)
+        dichte = lesen == self.read_gravity
+        werte = [self._umrechnen(v, st, dichte) for v in werte]
+        werte = [w + korr for w in werte if w is not None] + [aktuell]
+        werte.sort()
+        n = len(werte)
+        return werte[n // 2] if n % 2 else (werte[n // 2 - 1] + werte[n // 2]) / 2
+
+    async def _async_historie(self, entity_id: str, fenster: timedelta) -> list[str]:
+        from homeassistant.components.recorder import get_instance, history  # noqa: PLC0415
+
+        start = dt_util.utcnow() - fenster
+        daten = await get_instance(self.hass).async_add_executor_job(
+            history.state_changes_during_period, self.hass, start, None, entity_id, True, False, None, True
+        )
+        return [s.state for s in daten.get(entity_id, [])]
+
+    def _umrechnen(self, roh: str, st: State | None, dichte: bool) -> float | None:
+        """Historischen Rohwert wie den aktuellen umrechnen (ohne Korrektur)."""
+        try:
+            v = float(roh)
+        except (TypeError, ValueError):
+            return None
+        attrs = st.attributes if st else {}
+        if dichte:
+            unit = (attrs.get("unit_of_measurement") or "").lower()
+            if unit.replace("°", "").strip() in ("p", "plato") or v > 1.5:
+                return v
+            return db.dichte_to_plato(v) if SG_MIN <= v <= SG_MAX else None
+        unit = attrs.get("unit_of_measurement")
+        if unit and unit != UnitOfTemperature.CELSIUS:
+            try:
+                v = TemperatureConverter.convert(v, unit, UnitOfTemperature.CELSIUS)
+            except Exception:  # noqa: BLE001
+                pass
+        return v
+
     # ------------------------------------------------------------------ Pill lesen
     def _fresh_state(self, entity_id: str, sud_id: int | None) -> State:
         state = self.hass.states.get(entity_id)
@@ -405,8 +472,9 @@ class BrauhelferCoordinator(DataUpdateCoordinator[db.Snapshot]):
             raise self._fail(sud_id, f"Die Pill hat seit {minuten} min keinen Wert gesendet ({entity_id})")
         return state
 
-    def read_gravity(self, entity_id: str, sud_id: int | None = None) -> float:
-        """Dichte als scheinbarer Restextrakt in °P."""
+    def read_gravity(self, entity_id: str, sud_id: int | None = None, roh: bool = False) -> float:
+        """Dichte als scheinbarer Restextrakt in °P (mit Abgleich-Korrektur, außer roh)."""
+        korr = 0.0 if roh else self.korrektur(entity_id)
         state = self._fresh_state(entity_id, sud_id)
         try:
             value = float(state.state)
@@ -414,12 +482,13 @@ class BrauhelferCoordinator(DataUpdateCoordinator[db.Snapshot]):
             raise self._fail(sud_id, f"{entity_id}: '{state.state}' ist keine Zahl") from err
         unit = (state.attributes.get("unit_of_measurement") or "").lower()
         if unit.replace("°", "").strip() in ("p", "plato") or value > 1.5:
-            return value
+            return value + korr
         if not SG_MIN <= value <= SG_MAX:
             raise self._fail(sud_id, f"Dichte {value} unplausibel")
-        return db.dichte_to_plato(value)
+        return db.dichte_to_plato(value) + korr
 
-    def read_temperature(self, entity_id: str, sud_id: int | None = None) -> float:
+    def read_temperature(self, entity_id: str, sud_id: int | None = None, roh: bool = False) -> float:
+        korr = 0.0 if roh else self.korrektur(entity_id)
         state = self._fresh_state(entity_id, sud_id)
         try:
             value = float(state.state)
@@ -431,7 +500,7 @@ class BrauhelferCoordinator(DataUpdateCoordinator[db.Snapshot]):
                 value = TemperatureConverter.convert(value, unit, UnitOfTemperature.CELSIUS)
             except Exception:  # noqa: BLE001 - unbekannte Einheit, Wert so übernehmen
                 pass
-        return value
+        return value + korr
 
     # ------------------------------------------------------------------ Pills finden
     @callback

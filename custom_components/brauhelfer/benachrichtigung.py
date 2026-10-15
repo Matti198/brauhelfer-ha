@@ -8,12 +8,13 @@ kann erneut kommen). Die gesendeten Schlüssel überleben Neustarts.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components import persistent_notification
 from homeassistant.components.media_player import MediaPlayerEntityFeature
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
@@ -27,6 +28,18 @@ _LOGGER = logging.getLogger(__name__)
 
 PRUEF_INTERVALL = timedelta(minutes=5)
 PANEL_URL = "/brauhelfer"
+AKTION_EVENT = "mobile_app_notification_action"
+AKTION_RE = re.compile(r"BRAUHELFER_(FERTIG|WARTEN)_(\d+)")
+WARTEN = timedelta(days=2)
+
+
+def gaer_aktionen(sud_id: int) -> list[dict[str, Any]]:
+    """Knöpfe für die Push-Meldung (iOS/Android-App von Home Assistant)."""
+    return [
+        {"action": f"BRAUHELFER_FERTIG_{sud_id}", "title": "Gärung fertig",
+         "destructive": True, "authenticationRequired": True},
+        {"action": f"BRAUHELFER_WARTEN_{sud_id}", "title": "Noch 2 Tage warten"},
+    ]
 
 
 def notify_dienste(hass: HomeAssistant) -> list[str]:
@@ -51,6 +64,7 @@ class Benachrichtiger:
         self.coord = coord
         self.hass: HomeAssistant = coord.hass
         self._unsub = None
+        self._unsub_aktion = None
         self._temp_ausserhalb_seit: dict[int, datetime] = {}
 
     @property
@@ -64,17 +78,51 @@ class Benachrichtiger:
     @callback
     def async_start(self) -> None:
         self._unsub = async_track_time_interval(self.hass, self._async_pruefen, PRUEF_INTERVALL, name="Brauhelfer Meldungen")
+        self._unsub_aktion = self.hass.bus.async_listen(AKTION_EVENT, self._async_aktion)
 
     @callback
     def async_stop(self) -> None:
         if self._unsub:
             self._unsub()
             self._unsub = None
+        if self._unsub_aktion:
+            self._unsub_aktion()
+            self._unsub_aktion = None
+
+    # ------------------------------------------------------------------ Knöpfe in der Meldung
+    async def _async_aktion(self, event: Event) -> None:
+        m = AKTION_RE.fullmatch(str(event.data.get("action") or ""))
+        if not m:
+            return
+        art, sud_id = m.group(1), int(m.group(2))
+        snap = self.coord.data
+        sud = snap.sude.get(sud_id) if snap else None
+        if sud is None or sud.status != db.STATUS_GEBRAUT:
+            return
+        if art == "WARTEN":
+            self.coord.speicher.data["erinnern"][str(sud_id)] = (dt_util.now() + WARTEN).isoformat()
+            self.coord.speicher.speichern()
+            _LOGGER.info("„%s“: erinnere in %s erneut", sud.name, WARTEN)
+            return
+        try:
+            await self.coord.async_abfuellen(sud_id, None, None)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("„%s“ konnte nicht als fertig eingetragen werden: %s", sud.name, err)
+            await self.async_senden(
+                f"{sud.name}: nicht eingetragen", f"Gärung fertig ging nicht: {err}", ereignis="aktion",
+            )
+            return
+        self.coord.speicher.data["erinnern"].pop(str(sud_id), None)
+        await self.async_senden(
+            f"{sud.name} ist abgefüllt",
+            "Gärung als fertig eingetragen. Aufzeichnung und Gärschrank-Regelung sind beendet.",
+            ereignis="aktion",
+        )
 
     # ------------------------------------------------------------------ senden
     async def async_senden(
         self, titel: str, text: str, *, ereignis: str, schluessel: str | None = None,
-        ansage: bool = False, dringend: bool = False,
+        ansage: bool = False, dringend: bool = False, aktionen: list[dict[str, Any]] | None = None,
     ) -> bool:
         """Meldung senden. Mit Schlüssel nur einmal, bis `async_zuruecksetzen`."""
         if not self.cfg["ereignisse"].get(ereignis, True):
@@ -97,6 +145,8 @@ class Benachrichtiger:
             data: dict[str, Any] = {"url": PANEL_URL, "clickAction": PANEL_URL, "group": "brauhelfer"}
             if dringend:
                 data["push"] = {"interruption-level": "time-sensitive"}
+            if aktionen:
+                data["actions"] = aktionen
             await self._call(ziel, {"title": titel, "message": text, "data": data})
         if ansage and self.cfg["lautsprecher"]:
             await self.async_ansagen(text)
@@ -168,14 +218,22 @@ class Benachrichtiger:
         a = self.coord.aufzeichnungen.get(sud.id)
         live = self.coord.live_werte(sud.id)
 
+        # "Noch warten" abgelaufen: Meldungen dürfen erneut kommen
+        erinnern = self.coord.speicher.data["erinnern"].get(str(sud.id))
+        if erinnern and dt_util.parse_datetime(erinnern) <= dt_util.now():
+            self.coord.speicher.data["erinnern"].pop(str(sud.id), None)
+            self.coord.speicher.speichern()
+            self.async_zuruecksetzen(f"ziel_vg:{sud.id}")
+            self.async_zuruecksetzen(f"stagnation:{sud.id}")
+
         # Ziel-Vergärungsgrad erreicht
         if live["vg"] is not None and sud.vergaerungsgrad_rezept > 0:
             if live["vg"] >= sud.vergaerungsgrad_rezept - 1:
                 await self.async_senden(
                     f"{sud.name}: Ziel erreicht",
                     f"Vergärungsgrad {live['vg']:.0f} % von {sud.vergaerungsgrad_rezept:.0f} % "
-                    f"(Restextrakt {live['sre']:.1f} °P). Zeit für die Schnellgärprobe-Kontrolle oder „Gärung fertig“.",
-                    ereignis="ziel_vg", schluessel=f"ziel_vg:{sud.id}",
+                    f"(Restextrakt {live['sre']:.1f} °P). Fertig? Dann gedrückt halten und „Gärung fertig“ wählen.",
+                    ereignis="ziel_vg", schluessel=f"ziel_vg:{sud.id}", aktionen=gaer_aktionen(sud.id),
                 )
 
         # Gärung stagniert: alle Einträge der letzten X Stunden innerhalb weniger Zehntel °P
@@ -192,8 +250,8 @@ class Benachrichtiger:
                     await self.async_senden(
                         f"{sud.name}: Gärung steht",
                         f"Seit {cfg['stagnation_h']} h kaum Veränderung ({min(werte):.1f}–{max(werte):.1f} °P). "
-                        "Fertig? Dann auf der Brauhelfer-Seite „Gärung fertig“ wählen.",
-                        ereignis="stagnation", schluessel=schluessel,
+                        "Fertig? Dann gedrückt halten und „Gärung fertig“ wählen.",
+                        ereignis="stagnation", schluessel=schluessel, aktionen=gaer_aktionen(sud.id),
                     )
                 else:
                     self.async_zuruecksetzen(schluessel)

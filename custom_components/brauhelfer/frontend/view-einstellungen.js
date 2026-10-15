@@ -101,6 +101,19 @@ export function render(p) {
     </div>
   </ha-card>`;
 
+  const GLAETTUNG = [0, 10, 30, 60, 120];
+  const pill = `<ha-card>
+    <div class="card-head"><h3>${icon("test-tube")}Pill</h3></div>
+    <div class="card-body">
+      <div class="felder">
+        <label class="feld"><span>Werte glätten</span><select data-cfg-glaettung>
+          ${GLAETTUNG.map((g) => `<option value="${g}" ${(est.glaettung_min ?? 30) === g ? "selected" : ""}>${g ? `über ${g} min` : "aus"}</option>`).join("")}
+        </select></label>
+      </div>
+      <p class="muted" style="margin:10px 0 0">Beim Eintragen in den Gärverlauf nimmt Home Assistant den Median der Pill-Werte aus diesem Zeitraum. Einzelne Ausreißer landen so nicht in der Kurve. Den Abgleich mit einer Spindel machst du beim Sud unter „Aufzeichnung → Abgleichen“.</p>
+    </div>
+  </ha-card>`;
+
   const schraenke = `<ha-card>
     <div class="card-head"><h3>${icon("fridge-industrial-outline")}Gärschränke</h3></div>
     <div class="card-body">
@@ -118,7 +131,7 @@ export function render(p) {
   </ha-card>`;
 
   const geaendert = parseDate(e.geaendert);
-  return meldungen + lager + schraenke + `<footer>Datenbank ${esc(e.path)}, Version ${e.db_version}, zuletzt geändert ${geaendert ? dfDate.format(geaendert) : "–"}.<br>
+  return meldungen + pill + lager + schraenke + `<footer>Datenbank ${esc(e.path)}, Version ${e.db_version}, zuletzt geändert ${geaendert ? dfDate.format(geaendert) : "–"}.<br>
     Intervall der Pill-Aufzeichnung, Höchstalter der Werte und Sicherungen stellst du bei der Integration unter „Konfigurieren“ ein.</footer>`;
 }
 
@@ -178,6 +191,13 @@ export const actions = {
 };
 
 export function change(p, ev) {
+  const gl = ev.target.closest?.("select[data-cfg-glaettung]");
+  if (gl) {
+    p.ws("einstellungen", { einstellungen: { glaettung_min: Number(gl.value) } })
+      .then(() => { p.toast("Gespeichert."); return p.fetch(); })
+      .catch((err) => p.toast(err?.message || String(err)));
+    return;
+  }
   const ls = ev.target.closest?.("select[data-cfg-lautsprecher]");
   if (ls) {
     if (ls.value) speichern(p, { lautsprecher: [...(p.entry.benachrichtigung.lautsprecher || []), ls.value] }, "Lautsprecher hinzugefügt.");
